@@ -9,6 +9,7 @@ edition = "2021"
 actix-web = "4.5.1"
 async-trait = "0.1.77"
 base64 = "0.21.7"
+clap = { version = "4.5.1", features = ["derive", "env"] }
 ctrlc = "3.4.2"
 dotenv = "0.15.0"
 futures-util = "0.3.30"
