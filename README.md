@@ -136,13 +136,26 @@ root:
 
 ### Compatible Inscribe
 
+For developers, just set token-protocol and modify marketplace module, a new inscriptions indexer born.
+
 ### Efficient Storage
 
+Flat KV storage. Insdexer use RocksDB (a key-value database) and storage in a simple way.
+
+Transaction Inscribe. Insdexer utilize transactions to batch process block data, aiming for high performance and consistency.
+
+It has a Log-Structured-Merge-Database (LSM) design with flexible tradeoffs between Write-Amplification-Factor (WAF), Read-Amplification-Factor (RAF) and Space-Amplification-Factor (SAF). It has multi-threaded compactions, making it especially suitable for storing multiple terabytes of data in a single database.
+
 ### Multi-Thread Sync
+
+Insdexer separate block syncing and inscribe. It use multi-threading for block data synchronization.
+For first syncing, you can adjust the number of threads and working buffer according to machine configuration and bandwidth. After reaching the latest block, adjustments to settings can be made.
 
 ### JSON-RPC daemon
 
 ## Documentation
+
+[https://insdexer.gitbook.io](https://insdexer.gitbook.io)
 
 ## FAQ
 
