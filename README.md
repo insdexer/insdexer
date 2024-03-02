@@ -29,9 +29,9 @@ at your option.
   * [RESTful-API](#restful-api)
 
 * [Key features](#key-features)
-  * [Compatible Inscribe](#more-efficient-state-storage)
-  * [Efficient Storage](#more-efficient-state-storage)
-  * [Multi-Thread Sync](#faster-initial-sync)
+  * [Compatible Inscribe](#compatible-inscribe)
+  * [Efficient Storage](#efficient-storage)
+  * [Multi-Thread Sync](#multi-thread-sync)
   * [JSON-RPC daemon](#json-rpc-daemon)
 
 * [Documentation](#documentation)
