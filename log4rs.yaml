@@ -2,6 +2,8 @@ refresh_rate: 30 seconds
 appenders:
   stdout:
     kind: console
+    encoder:
+      pattern: "{d} {l} {m}{n}"
   file:
     kind: file
     path: "logs/insdexer.log"
