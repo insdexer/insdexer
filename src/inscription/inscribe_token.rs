@@ -59,6 +59,10 @@ impl ProcessBlockContextJsonToken for InscribeContext {
             return false;
         }
 
+        if tick.find(':').is_some() {
+            return false;
+        }
+
         let token_max = match insc.json["max"].parse_u64() {
             Some(value) => value,
             None => {
