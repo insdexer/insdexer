@@ -49,13 +49,13 @@ async fn tokens(info: Query<TokensParams>, state: WebData) -> impl Responder {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TokenInfoParams {
-    tick: Option<String>,
+    tick: String,
 }
 
 #[get("/token_info")]
 async fn token_info(info: Query<TokenInfoParams>, state: WebData) -> impl Responder {
     let db = state.db.read().unwrap();
-    let key_tick = make_index_key(KEY_INSC_TOKEN_INDEX_TICK_I, &info.tick.as_ref().unwrap());
+    let key_tick = make_index_key(KEY_INSC_TOKEN_INDEX_TICK_I, &info.tick);
     let id = db.get_u64(key_tick.as_str());
     if id == 0 {
         HttpResponse::response_error_notfound();
