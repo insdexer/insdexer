@@ -2,7 +2,7 @@ use rocksdb::TransactionDB;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
 
 pub const TRANSFER_TX_RAW_LENGTH: usize = 32;
@@ -134,9 +134,10 @@ pub struct WorkerSyncState {
     pub blocks: HashMap<u64, web3::types::Block<web3::types::Transaction>>,
     pub event_logs: HashMap<u64, HashMap<u64, Vec<web3::types::Log>>>,
     pub worker_count: u64,
+    pub latest_blocknumber: u64,
 }
 
 pub struct WorkerSync {
     pub db: Arc<RwLock<rocksdb::TransactionDB>>,
-    pub state: Arc<Mutex<WorkerSyncState>>,
+    pub state: Arc<RwLock<WorkerSyncState>>,
 }

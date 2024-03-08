@@ -7,13 +7,12 @@ use crate::{
 use actix_cors::Cors;
 use actix_web::{get, middleware, web, App, HttpResponse, HttpServer, Responder};
 use log::{info, warn};
-use rocksdb::TransactionDB;
 use std::sync::{Arc, RwLock};
 
 impl APIState {
-    pub fn new(db: Arc<RwLock<TransactionDB>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            db,
+            db: Arc::new(RwLock::new(Self::db())),
             blocknumber: 0.into(),
         }
     }
@@ -21,7 +20,7 @@ impl APIState {
     pub fn db() -> rocksdb::DB {
         let options = rocksdb::Options::default();
         loop {
-            return match rocksdb::DB::open_for_read_only(&options, DB_PATH.as_str(), true) {
+            return match rocksdb::DB::open_as_secondary(&options, DB_PATH.as_str(), "./.api_tmpdb") {
                 Ok(db) => db,
                 Err(e) => {
                     warn!("[api] open db failed: {}, retry", e);
@@ -51,8 +50,8 @@ async fn blocknumber_refresh(state: WebData) {
     }
 }
 
-pub async fn run(db: Arc<RwLock<TransactionDB>>) {
-    let state = web::Data::new(Arc::new(APIState::new(db)));
+pub async fn run() {
+    let state = web::Data::new(Arc::new(APIState::new()));
     tokio::spawn(blocknumber_refresh(state.clone()));
 
     let server = HttpServer::new(move || {
