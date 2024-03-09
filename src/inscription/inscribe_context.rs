@@ -36,7 +36,7 @@ impl InscribeContext {
             txn.inscription_inscribe(insc);
             if insc.verified == InscriptionVerifiedStatus::Successful {
                 if insc.mime_category == InscriptionMimeCategory::Json {
-                    self.save_inscribe_json(&txn, &insc);
+                    self.save_inscribe_json(&db, &txn, &insc);
                 }
                 self.save_market(&db, &txn, &insc);
             }
