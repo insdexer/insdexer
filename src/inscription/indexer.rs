@@ -83,7 +83,9 @@ impl Indexer {
             self.delete_keys(KEY_MARKET_ORDER_INDEX_TICK_PRICE);
             self.delete_keys(KEY_MARKET_ORDER_INDEX_NFT);
             self.delete_keys(KEY_MARKET_ORDER_INDEX_TIME);
+            self.delete_keys(KEY_MARKET_ORDER_INDEX_TICK_TIME);
             self.delete_keys(KEY_MARKET_ORDER_INDEX_SELLER_CLOSE_CANCEL);
+            self.delete_keys(KEY_MARKET_ORDER_INDEX_CLOSE_TICK_TIME);
 
             info!("[indexer] reindex done");
         }

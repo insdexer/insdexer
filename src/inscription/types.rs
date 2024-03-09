@@ -78,8 +78,15 @@ pub struct InscriptionToken {
     pub mint_progress: u64,
     pub mint_finished: bool,
 
+    pub market_volume24h: u128,
+    pub market_txs24h: u64,
+    pub market_cap: u128,
+    pub market_floor_price: u128,
+
     #[serde(skip_serializing, default = "default_value_bool")]
     pub updated: bool,
+    #[serde(skip_serializing, default = "default_value_bool")]
+    pub market_updated: bool,
     #[serde(skip_serializing, default = "default_value_bool")]
     pub deploy: bool,
 }
