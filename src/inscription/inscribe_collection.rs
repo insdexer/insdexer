@@ -62,14 +62,13 @@ impl ProcessBlockContextJsonCollection for InscribeContext {
                 return false;
             }
 
-            let item_holder = self
-                .db
-                .read()
-                .unwrap()
-                .get_inscription_nft_holder_by_id(item_insc.id)
-                .unwrap();
+            let item_holder = self.db.read().unwrap().get_inscription_nft_holder_by_id(item_insc.id);
+            if item_holder.is_none() {
+                info!("[indexer] inscribe collection item holder not found: {}", item_tx_hash);
+                return false;
+            }
 
-            if item_holder != insc.from {
+            if item_holder.unwrap() != insc.from {
                 info!(
                     "[indexer] inscribe collection item holder not match: {} {}",
                     item_tx_hash,
