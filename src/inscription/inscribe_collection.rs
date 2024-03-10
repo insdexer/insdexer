@@ -91,7 +91,7 @@ impl ProcessBlockContextJsonCollection for InscribeContext {
         txn.inscription_nft_collection_insert(insc);
         let items = insc.json["items"].as_array().unwrap();
         for item in items {
-            let item_tx_hash = item.as_str().unwrap();
+            let item_tx_hash = item["tx"].as_str().unwrap();
             let mut item_insc = db.get_inscription_by_tx(item_tx_hash).unwrap();
             item_insc.collection = Some(insc.tx_hash.clone());
             txn.inscription_update(&item_insc);
