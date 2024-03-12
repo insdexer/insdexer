@@ -63,6 +63,22 @@ pub struct Args {
     #[arg(long, env, default_value = "10240")]
     pub open_files_limit: u64,
 
+    /// The checkpoint span
+    #[arg(long, default_value = "10")]
+    pub checkpoint_span: u64,
+
+    /// The checkpoint length
+    #[arg(long, default_value = "20")]
+    pub checkpoint_len: usize,
+
+    /// Finalized block
+    #[arg(long, env, default_value = "50")]
+    pub finalized_block: u64,
+
+    /// Checkpoint base path
+    #[arg(long, env, default_value = "./.checkpoint")]
+    pub checkpoint_path: String,
+
     /// The market address list
     #[arg(long, default_value = "")]
     pub market_address_list: String,

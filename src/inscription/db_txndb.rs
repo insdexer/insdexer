@@ -19,6 +19,15 @@ impl<T: DBBase + TxnDB + DBAccess> InscribeDB for T {
         self.get_u64(KEY_SYNC_BLOCKNUMBER)
     }
 
+    fn get_rollback_blocknumber(&self) -> u64 {
+        self.get_u64(KEY_ROLLBACK_BLOCKNUMBER)
+    }
+
+    fn get_block_hash(&self, blocknumber: u64) -> Option<String> {
+        let key = make_index_key(KEY_SYNC_BLOCK_HASH, blocknumber);
+        self.get_string(&key)
+    }
+
     fn inscription_sign_exists(&self, sign: &str) -> bool {
         let key = make_index_key(KEY_INSC_INDEX_SIGN, sign);
         self.get(key.as_bytes()).unwrap().is_some()
@@ -63,6 +72,11 @@ impl<T: DBBase + TxnDB + DBAccess> InscribeDB for T {
 
     fn get_inscription_nft_holder_by_id(&self, id: u64) -> Option<String> {
         let key_id = make_index_key(KEY_INSC_NFT_INDEX_HOLDER, num_index!(id));
+        self.get_string(&key_id)
+    }
+
+    fn get_inscription_nft_collection_by_id(&self, id: u64) -> Option<String> {
+        let key_id = make_index_key(KEY_INSC_NFT_COLL_ITEM_INDEX_ID, num_index!(id));
         self.get_string(&key_id)
     }
 
@@ -150,7 +164,7 @@ impl<T: DBBase + TxnDB + DBAccess> InscribeDB for T {
                     break;
                 }
 
-                item_list.push((key.to_vec(),value.to_vec()));
+                item_list.push((key.to_vec(), value.to_vec()));
             } else {
                 break;
             }

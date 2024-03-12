@@ -19,23 +19,28 @@ impl<'a> InscribeTxn<'a> for Transaction<'a, TransactionDB> {
         self.put(KEY_SYNC_BLOCKNUMBER.as_bytes(), blocknumber.to_be_bytes()).unwrap();
     }
 
-    fn inscription_insert(&self, insc: &Inscription) {
-        let insc_data = serde_json::to_string(insc).unwrap();
+    fn set_rollback_blocknumber(&self, blocknumber: u64) {
+        self.put(KEY_ROLLBACK_BLOCKNUMBER.as_bytes(), blocknumber.to_be_bytes())
+            .unwrap();
+    }
 
-        let index_key_id = make_index_key(KEY_INSC_INDEX_ID, num_index!(insc.id));
+    fn set_block_hash(&self, blocknumber: u64, block_hash: &str) {
+        let key = make_index_key(KEY_SYNC_BLOCK_HASH, blocknumber);
+        self.put(key.as_bytes(), block_hash.as_bytes()).unwrap();
+    }
+
+    fn inscription_insert(&self, insc: &Inscription) {
+        self.inscription_update(insc);
+
         let index_key_tx = make_index_key(KEY_INSC_INDEX_TX, &insc.tx_hash);
         let index_key_creater = make_index_key2(KEY_INSC_INDEX_CREATER, &insc.from, num_index_desc!(insc.id));
 
-        self.put(index_key_id.as_bytes(), insc_data.as_bytes()).unwrap();
         self.put(index_key_tx.as_bytes(), insc.id.to_be_bytes()).unwrap();
         self.put(index_key_creater.as_bytes(), "").unwrap();
     }
 
     fn inscription_inscribe(&self, insc: &Inscription) {
-        let insc_data = serde_json::to_string(insc).unwrap();
-
-        let index_key_id = make_index_key(KEY_INSC_INDEX_ID, num_index!(insc.id));
-        self.put(index_key_id.as_bytes(), insc_data.as_bytes()).unwrap();
+        self.inscription_update(insc);
 
         if insc.verified == InscriptionVerifiedStatus::Successful {
             let index_key_from = make_index_key2(KEY_INSC_INDEX_ADDRESS, &insc.from, num_index_desc!(insc.id));
@@ -62,28 +67,38 @@ impl<'a> InscribeTxn<'a> for Transaction<'a, TransactionDB> {
         }
     }
 
+    fn inscription_update(&self, insc: &Inscription) {
+        let insc_data = serde_json::to_string(insc).unwrap();
+        let index_key_id = make_index_key(KEY_INSC_INDEX_ID, num_index!(insc.id));
+        self.put(index_key_id.as_bytes(), insc_data.as_bytes()).unwrap();
+    }
+
     fn inscription_nft_holder_update(&self, db: &TransactionDB, id: u64, new_holder: &str) {
         let index_key_nft_holder_id = make_index_key(KEY_INSC_NFT_INDEX_HOLDER, num_index!(id));
-        let old_holder = db.get_string(&index_key_nft_holder_id).unwrap();
-
-        let old_key_holder = make_index_key2(KEY_INSC_NFT_INDEX_HOLDER_ADDRESS, &old_holder, num_index_desc!(id));
-        let new_key_holder = make_index_key2(KEY_INSC_NFT_INDEX_HOLDER_ADDRESS, new_holder, num_index_desc!(id));
-
-        self.delete(old_key_holder.as_bytes()).unwrap();
+        if let Some(old_holder) = db.get_string(&index_key_nft_holder_id) {
+            let old_key_holder = make_index_key2(KEY_INSC_NFT_INDEX_HOLDER_ADDRESS, &old_holder, num_index_desc!(id));
+            self.delete(old_key_holder.as_bytes()).unwrap();
+        }
 
         self.put(index_key_nft_holder_id.as_bytes(), new_holder.as_bytes()).unwrap();
+
+        let new_key_holder = make_index_key2(KEY_INSC_NFT_INDEX_HOLDER_ADDRESS, new_holder, num_index_desc!(id));
         self.put(new_key_holder.as_bytes(), "").unwrap();
     }
 
-    fn inscription_nft_transfer_insert(&self, insc_id: u64, transfer_insc_id: u64, index: u64) {
-        let index_key_id = make_index_key3(
+    fn inscription_nft_transfer_insert(&self, trans: &NFTTransfer) {
+        let index_key_id = make_index_key2(
             KEY_INSC_NFT_TRANS_INDEX_ID,
-            num_index!(insc_id),
-            num_index!(transfer_insc_id),
-            num_index!(index),
+            num_index!(trans.nft_id),
+            num_index_desc!(trans.transfer_id),
         );
 
         self.put(index_key_id.as_bytes(), "").unwrap();
+    }
+
+    fn inscription_nft_set_collection(&self, id: u64, collection: &str) {
+        let index_key_id = make_index_key(KEY_INSC_NFT_COLL_ITEM_INDEX_ID, num_index!(id));
+        self.put(index_key_id.as_bytes(), collection.as_bytes()).unwrap();
     }
 
     fn inscription_nft_collection_insert(&self, insc: &Inscription) {

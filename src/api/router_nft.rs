@@ -1,15 +1,19 @@
 use super::{HttpResponseExt, WebData, PAGE_SIZE};
-use crate::inscription::{db::*, types::*};
+use crate::{
+    inscription::{db::*, marketplace::db::InscribeMarketDB, types::*},
+    num_index,
+};
 use actix_web::{get, web, web::Query, HttpResponse, Responder};
 use base64::{engine::general_purpose, Engine as _};
 use rocksdb::Direction;
 use serde::{Deserialize, Serialize};
 
 pub fn register(config: &mut web::ServiceConfig) {
-    config.service(recent_nfts);
-    config.service(collections);
+    config.service(nft_recent);
+    config.service(nft_collections);
     config.service(nfts);
     config.service(nft);
+    config.service(nft_transfers);
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,7 +23,7 @@ struct RecentNFTsParams {
 }
 
 #[get("/nft_recent")]
-async fn recent_nfts(info: Query<RecentNFTsParams>, state: WebData) -> impl Responder {
+async fn nft_recent(info: Query<RecentNFTsParams>, state: WebData) -> impl Responder {
     let db = state.db.read().unwrap();
     let page = info.page.unwrap_or(1) - 1;
     let key_list = db.get_item_keys(
@@ -44,12 +48,54 @@ async fn recent_nfts(info: Query<RecentNFTsParams>, state: WebData) -> impl Resp
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+struct NFTTransfersParams {
+    page: Option<u64>,
+    tx: Option<String>,
+    id: Option<u64>,
+}
+
+#[get("/nft_transfers")]
+async fn nft_transfers(info: Query<NFTTransfersParams>, state: WebData) -> impl Responder {
+    let db = state.db.read().unwrap();
+    let nft_insc = if let Some(insc_id) = info.id {
+        db.get_inscription_by_id(insc_id)
+    } else if let Some(insc_tx) = &info.tx {
+        db.get_inscription_by_tx(insc_tx)
+    } else {
+        None
+    };
+
+    let nft_insc = match nft_insc {
+        Some(value) => value,
+        None => return HttpResponse::response_error_notfound(),
+    };
+
+    let page = info.page.unwrap_or(1) - 1;
+    let prefix = make_index_key(KEY_INSC_NFT_TRANS_INDEX_ID, num_index!(nft_insc.id)) + ":";
+    let key_list = db.get_item_keys(&prefix, &prefix, page * PAGE_SIZE, PAGE_SIZE, Direction::Forward);
+    let transfer_id_list = db_index2id_desc(key_list);
+    let transfer_list = db.get_inscriptions_by_id(&transfer_id_list);
+    let mut response = Vec::new();
+
+    for trans_insc in &transfer_list {
+        let mut trans = serde_json::to_value(trans_insc).unwrap();
+        if let Some(order_id) = &trans_insc.market_order_id {
+            let order = db.market_get_order_by_id(order_id).unwrap();
+            trans["market_order"] = serde_json::to_value(&order).unwrap();
+        }
+        response.push(trans);
+    }
+
+    HttpResponse::response_data(response)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct CollectionsParams {
     page: Option<u64>,
 }
 
 #[get("/nft_collections")]
-async fn collections(info: Query<CollectionsParams>, state: WebData) -> impl Responder {
+async fn nft_collections(info: Query<CollectionsParams>, state: WebData) -> impl Responder {
     let db = state.db.read().unwrap();
     let page = info.page.unwrap_or(1) - 1;
     let key_list = db.get_item_keys(
@@ -111,7 +157,9 @@ async fn nft(path: web::Path<String>, state: WebData) -> impl Responder {
                 let bytes = general_purpose::STANDARD.decode(&insc.mime_data).unwrap();
                 HttpResponse::Ok().content_type(insc.mime_type).body(bytes)
             }
-            InscriptionMimeCategory::Text => HttpResponse::Ok().body(insc.mime_data),
+            InscriptionMimeCategory::Text => HttpResponse::Ok()
+                .content_type("text/plain; charset=utf-8")
+                .body(insc.mime_data),
             _ => HttpResponse::BadRequest().body("Not an NFT"),
         },
         None => HttpResponse::NotFound().body("Inscription not found"),

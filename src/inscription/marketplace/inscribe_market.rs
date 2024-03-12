@@ -8,15 +8,15 @@ use crate::{
     config::MARKET_ADDRESS_LIST,
     ethereum::{Web3ABILogEvent, Web3LogEvent},
     inscription::{
-        db::InscribeDB,
+        db::{make_index_key, InscribeDB},
         inscribe_token::ProcessBlockContextJsonToken,
+        marketplace::db::KEY_MARKET_ORDER_INDEX_TICK_PRICE,
         trait_json_value::JsonValueTrait,
-        types::{InscribeContext, Inscription, InscriptionMimeCategory, TRANSFER_TX_HEX_LENGTH},
+        types::{InscribeContext, Inscription, InscriptionMimeCategory, InscriptionToken, NFTTransfer, TRANSFER_TX_HEX_LENGTH},
     },
 };
-use log::{debug, info, warn};
+use log::{info, warn};
 use rocksdb::{Transaction, TransactionDB};
-use std::vec;
 
 lazy_static! {
     pub static ref CONTRACT_MARKET: web3::ethabi::Contract = web3::ethabi::Contract::load(MARKET_ABI_JSON.as_bytes()).unwrap();
@@ -92,8 +92,6 @@ impl MarketPlace for InscribeContext {
         let holder = self.get_nft_holder(order.nft_id);
         assert!(MARKET_ADDRESS_LIST.contains(&holder));
 
-        let mut trans: Vec<(u64, u64, u64)> = vec![(insc.id, order.nft_id, 0)];
-
         match self.nft_holders.get_mut(&order.nft_id) {
             Some(holder) => *holder = insc.from.clone(),
             None => {
@@ -101,7 +99,10 @@ impl MarketPlace for InscribeContext {
             }
         }
 
-        self.nft_transfers.append(&mut trans);
+        self.nft_transfers.push(NFTTransfer {
+            nft_id: order.nft_id,
+            transfer_id: insc.id,
+        });
 
         info!(
             "[indexer] market_buy_nft: {} {} {} {}",
@@ -147,8 +148,6 @@ impl MarketPlace for InscribeContext {
         let holder = self.get_nft_holder(order.nft_id);
         assert!(MARKET_ADDRESS_LIST.contains(&holder));
 
-        let mut trans: Vec<(u64, u64, u64)> = vec![(insc.id, order.nft_id, 0)];
-
         match self.nft_holders.get_mut(&order.nft_id) {
             Some(holder) => *holder = insc.from.clone(),
             None => {
@@ -156,9 +155,12 @@ impl MarketPlace for InscribeContext {
             }
         }
 
-        self.nft_transfers.append(&mut trans);
+        self.nft_transfers.push(NFTTransfer {
+            nft_id: order.nft_id,
+            transfer_id: insc.id,
+        });
 
-        debug!(
+        info!(
             "[indexer] market_cancel_nft: {} {} {} {}",
             insc.tx_hash, order.order_id, insc.from, order.nft_id
         );
@@ -243,8 +245,8 @@ impl MarketPlace for InscribeContext {
 
         let log = insc.event_logs[0].match_event(&CONTRACT_MARKET, "MarketList").unwrap();
         let order_id = "0x".to_string() + &"0x".to_string() + &log.get_param("orderId").unwrap().to_string();
-        let nft_tx = &insc.mime_data[0..TRANSFER_TX_HEX_LENGTH];
-        let nft_id = self.db.read().unwrap().get_inscription_id_by_tx(nft_tx);
+        let nft_tx = "0x".to_string() + &insc.mime_data[0..TRANSFER_TX_HEX_LENGTH];
+        let nft_id = self.db.read().unwrap().get_inscription_id_by_tx(&nft_tx);
 
         let order = MarketOrder {
             order_type: MarketOrderType::NFT,
@@ -252,7 +254,7 @@ impl MarketPlace for InscribeContext {
             from: insc.from.clone(),
             to: insc.to.clone(),
             nft_id,
-            nft_tx: nft_tx.to_string(),
+            nft_tx,
             tick: "".to_string(),
             amount: 0,
             total_price: 0,
@@ -312,5 +314,45 @@ impl MarketPlace for InscribeContext {
         let order_id = "0x".to_string() + &log.get_param("orderId").unwrap().to_string();
 
         txn.market_order_cancel(db, &insc.tx_hash, &order_id);
+    }
+
+    fn update_token_market_info(db: &TransactionDB, token: &mut InscriptionToken) {
+        const MCAP_CALC_COUNT: u64 = 12;
+        let orders = db.market_get_closed_orders_24h(&token.tick);
+        let mut volume24: u128 = 0;
+        let mut mcap: f64 = 0.0;
+        let mut mcap_count = 0;
+
+        for order in &orders {
+            volume24 += order.amount as u128;
+            if mcap_count < MCAP_CALC_COUNT && order.amount >= token.mint_limit {
+                mcap += order.unit_price as f64 * token.mint_max as f64;
+                mcap_count += 1;
+            }
+        }
+
+        token.market_cap = (mcap / mcap_count as f64) as u128;
+        token.market_volume24h = volume24;
+        token.market_txs24h = orders.len() as u64;
+
+        // calculate floor price
+        let floor_prefix = make_index_key(KEY_MARKET_ORDER_INDEX_TICK_PRICE, &token.tick) + ":";
+        let mut iter = db.iterator(rocksdb::IteratorMode::From(
+            floor_prefix.as_bytes(),
+            rocksdb::Direction::Forward,
+        ));
+        while let Some(Ok((key, _))) = iter.next() {
+            if !key.starts_with(floor_prefix.as_bytes()) {
+                break;
+            }
+
+            let key = String::from_utf8(key.to_vec()).unwrap();
+            let order_id = key.rfind(':').map(|i| key[i + 1..].to_string()).unwrap();
+            let order = db.market_get_order_by_id(&order_id).unwrap();
+            if order.amount >= token.mint_limit {
+                token.market_floor_price = order.unit_price;
+                break;
+            }
+        }
     }
 }

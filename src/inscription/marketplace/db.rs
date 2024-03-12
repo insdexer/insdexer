@@ -1,5 +1,6 @@
 use super::types::{MarketOrder, MarketOrderStatus, MarketOrderType};
 use crate::{
+    global::get_timestamp,
     inscription::db::{make_index_key, make_index_key2, make_index_key3},
     num_index, num_index_desc,
     txn_db::{DBBase, TxnDB},
@@ -13,9 +14,11 @@ pub const KEY_MARKET_ORDER_INDEX_NFT: &'static str = "market_nft_id";
 pub const KEY_MARKET_ORDER_INDEX_TIME: &'static str = "market_time-id";
 pub const KEY_MARKET_ORDER_INDEX_TICK_TIME: &'static str = "market_tick_time-id";
 pub const KEY_MARKET_ORDER_INDEX_SELLER_CLOSE_CANCEL: &'static str = "market_seller_close_cancel-sort-id";
+pub const KEY_MARKET_ORDER_INDEX_CLOSE_TICK_TIME: &'static str = "market_close_tick_time-id";
 
 pub trait InscribeMarketDB: TxnDB {
     fn market_get_order_by_id(&self, order_id: &str) -> Option<MarketOrder>;
+    fn market_get_closed_orders_24h(&self, tick: &str) -> Vec<MarketOrder>;
 }
 
 impl<T: DBBase + TxnDB + DBAccess> InscribeMarketDB for T {
@@ -25,6 +28,29 @@ impl<T: DBBase + TxnDB + DBAccess> InscribeMarketDB for T {
             Some(data) => Some(serde_json::from_slice(&data).unwrap()),
             None => None,
         }
+    }
+
+    fn market_get_closed_orders_24h(&self, tick: &str) -> Vec<MarketOrder> {
+        let timestamp_24h_ago = get_timestamp() - 24 * 3600;
+        let prefix = make_index_key(KEY_MARKET_ORDER_INDEX_CLOSE_TICK_TIME, tick) + ":";
+        let mut iter = self.iterator(rocksdb::IteratorMode::From(prefix.as_bytes(), rocksdb::Direction::Forward));
+        let mut orders = Vec::new();
+
+        while let Some(Ok((key, _))) = iter.next() {
+            if !key.starts_with(prefix.as_bytes()) {
+                break;
+            }
+
+            let key = String::from_utf8(key.to_vec()).unwrap();
+            let order_id = key.rfind(':').map(|i| key[i + 1..].to_string()).unwrap();
+            let order = self.market_get_order_by_id(&order_id).unwrap();
+            if order.timestamp < timestamp_24h_ago {
+                break;
+            }
+
+            orders.push(order);
+        }
+        orders
     }
 }
 
@@ -173,8 +199,15 @@ impl<'a> InscribeMarketTxn<'a> for Transaction<'a, TransactionDB> {
                     num_index!(order.unit_price),
                     &order.order_id,
                 );
-
                 self.delete(index_key_tick_price.as_bytes()).unwrap();
+
+                let index_key_close_tick_time = make_index_key3(
+                    KEY_MARKET_ORDER_INDEX_CLOSE_TICK_TIME,
+                    &order.tick,
+                    num_index_desc!(order.timestamp),
+                    &order.order_id,
+                );
+                self.put(index_key_close_tick_time.as_bytes(), "").unwrap();
             }
         }
     }

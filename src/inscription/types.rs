@@ -2,7 +2,7 @@ use rocksdb::TransactionDB;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
 
 pub const TRANSFER_TX_RAW_LENGTH: usize = 32;
@@ -50,7 +50,7 @@ pub struct Inscription {
     pub mime_data: String,
     pub timestamp: u64,
     pub event_logs: Vec<web3::types::Log>,
-
+    
     #[serde(skip_serializing_if = "Option::is_none")]
     pub market_order_id: Option<String>,
 
@@ -78,8 +78,15 @@ pub struct InscriptionToken {
     pub mint_progress: u64,
     pub mint_finished: bool,
 
+    pub market_volume24h: u128,
+    pub market_txs24h: u64,
+    pub market_cap: u128,
+    pub market_floor_price: u128,
+
     #[serde(skip_serializing, default = "default_value_bool")]
     pub updated: bool,
+    #[serde(skip_serializing, default = "default_value_bool")]
+    pub market_updated: bool,
     #[serde(skip_serializing, default = "default_value_bool")]
     pub deploy: bool,
 }
@@ -115,11 +122,17 @@ pub struct Indexer {
     pub worker_inscribe: Arc<WorkerInscribe>,
 }
 
+pub struct  NFTTransfer {
+    pub nft_id: u64,
+    pub transfer_id: u64,
+}
+
 pub struct InscribeContext {
     pub db: Arc<RwLock<rocksdb::TransactionDB>>,
     pub inscriptions: Vec<Inscription>,
     pub nft_holders: HashMap<u64, String>,
-    pub nft_transfers: Vec<(u64, u64, u64)>,
+    pub nft_transfers: Vec<NFTTransfer>,
+    pub nft_signatures: HashMap<String, u64>,
 
     pub token_cache: HashMap<String, InscriptionToken>,
     pub token_balance_change: HashMap<String, HashMap<String, i64>>,
@@ -134,9 +147,10 @@ pub struct WorkerSyncState {
     pub blocks: HashMap<u64, web3::types::Block<web3::types::Transaction>>,
     pub event_logs: HashMap<u64, HashMap<u64, Vec<web3::types::Log>>>,
     pub worker_count: u64,
+    pub latest_blocknumber: u64,
 }
 
 pub struct WorkerSync {
     pub db: Arc<RwLock<rocksdb::TransactionDB>>,
-    pub state: Arc<Mutex<WorkerSyncState>>,
+    pub state: Arc<RwLock<WorkerSyncState>>,
 }

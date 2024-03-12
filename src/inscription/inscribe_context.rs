@@ -4,7 +4,8 @@ use super::{
     marketplace::MarketPlace,
     types::*,
 };
-use log::{debug, info};
+use crate::config::MARKET_ADDRESS_LIST;
+use log::info;
 use rocksdb::{Transaction, TransactionDB};
 use sha1::{Digest, Sha1};
 use std::{
@@ -19,6 +20,7 @@ impl InscribeContext {
             inscriptions: Vec::new(),
             nft_holders: HashMap::new(),
             nft_transfers: Vec::new(),
+            nft_signatures: HashMap::new(),
             token_cache: db.read().unwrap().get_tokens(),
             token_balance_change: HashMap::new(),
             token_transfers: Vec::new(),
@@ -34,7 +36,7 @@ impl InscribeContext {
             txn.inscription_inscribe(insc);
             if insc.verified == InscriptionVerifiedStatus::Successful {
                 if insc.mime_category == InscriptionMimeCategory::Json {
-                    self.save_inscribe_json(&txn, &insc);
+                    self.save_inscribe_json(&db, &txn, &insc);
                 }
                 self.save_market(&db, &txn, &insc);
             }
@@ -68,12 +70,18 @@ impl InscribeContext {
             let token = self.token_cache.get_mut(tick).unwrap();
             token.updated = true;
             for (address, balance_change) in balance_change_coll {
-                let holder_change = txn.inscription_token_banalce_update(&db, tick, address, *balance_change);
+                let holder_change = txn.inscription_token_banalce_update(db, tick, address, *balance_change);
                 token.holders = (token.holders as i64 + holder_change) as u64;
+                if MARKET_ADDRESS_LIST.contains(address) {
+                    token.market_updated = true;
+                }
             }
         }
 
-        for (_, token) in &self.token_cache {
+        for (_, token) in &mut self.token_cache {
+            if token.market_updated {
+                Self::update_token_market_info(db, token);
+            }
             if token.updated {
                 txn.inscription_token_update(token);
             }
@@ -106,15 +114,18 @@ impl InscribeContext {
         }
     }
 
-    fn process_inscribe_plain(&self, insc: &mut Inscription) -> bool {
+    fn process_inscribe_plain(&mut self, insc: &mut Inscription) -> bool {
         let mut hasher = Sha1::new();
         hasher.update(insc.mime_data.as_bytes());
         let result = hasher.finalize();
         let signature = format!("{:x}", result);
-        if self.db.read().unwrap().inscription_sign_exists(signature.as_str()) {
-            debug!("[indexer] inscribe existed: {} {}", insc.tx_hash.as_str(), signature);
+        if self.nft_signature_exists(signature.as_str()) {
+            info!("[indexer] inscribe existed: {} {}", insc.tx_hash.as_str(), signature);
             return false;
         }
+
+        self.nft_signatures.insert(signature.clone(), insc.id);
+        self.nft_holders.insert(insc.id, insc.to.clone());
 
         insc.signature = Some(signature);
 
@@ -131,17 +142,35 @@ impl InscribeContext {
         }
     }
 
+    pub fn nft_signature_exists(&self, signature: &str) -> bool {
+        match self.nft_signatures.get(signature) {
+            Some(_) => true,
+            None => self.db.read().unwrap().inscription_sign_exists(signature),
+        }
+    }
+
     fn process_inscribe_nft_transfer(&mut self, insc: &Inscription) -> bool {
-        let mut trans: Vec<(u64, u64, u64)> = Vec::new();
-        let mut index = 0;
+        let mut trans = Vec::new();
 
         for i in (0..insc.mime_data.len()).step_by(TRANSFER_TX_HEX_LENGTH) {
-            let item_insc_tx = &insc.mime_data[i..i + TRANSFER_TX_HEX_LENGTH];
-            if let Some(item_insc) = self.db.read().unwrap().get_inscription_by_tx(item_insc_tx) {
+            let item_insc_tx = "0x".to_string() + &insc.mime_data[i..i + TRANSFER_TX_HEX_LENGTH];
+            if let Some(item_insc) = self.db.read().unwrap().get_inscription_by_tx(&item_insc_tx) {
+                if item_insc.mime_category != InscriptionMimeCategory::Text
+                    || item_insc.mime_category != InscriptionMimeCategory::Image
+                {
+                    info!(
+                        "[indexer] transfer inscription mime category not match: {} {}",
+                        insc.tx_hash, item_insc_tx
+                    );
+                    return false;
+                }
+
                 let item_holder = self.get_nft_holder(item_insc.id);
                 if item_holder == insc.from {
-                    trans.push((insc.id, item_insc.id, index));
-                    index += 1;
+                    trans.push(NFTTransfer {
+                        nft_id: item_insc.id,
+                        transfer_id: insc.id,
+                    });
                     match self.nft_holders.get_mut(&item_insc.id) {
                         Some(holder) => *holder = insc.to.clone(),
                         None => {
@@ -149,14 +178,14 @@ impl InscribeContext {
                         }
                     }
                 } else {
-                    debug!(
+                    info!(
                         "[indexer] transfer inscription holder not match: {} {}",
                         insc.tx_hash, item_insc_tx
                     );
                     return false;
                 }
             } else {
-                debug!("[indexer] transfer inscription not found: {} {}", insc.tx_hash, item_insc_tx);
+                info!("[indexer] transfer inscription not found: {} {}", insc.tx_hash, item_insc_tx);
                 return false;
             }
         }
@@ -172,8 +201,8 @@ impl InscribeContext {
     }
 
     fn save_nft_transfer(&self, db: &TransactionDB, txn: &rocksdb::Transaction<rocksdb::TransactionDB>) {
-        for (insc_id, transfer_insc_id, index) in &self.nft_transfers {
-            txn.inscription_nft_transfer_insert(*insc_id, *transfer_insc_id, *index);
+        for trans in &self.nft_transfers {
+            txn.inscription_nft_transfer_insert(trans);
         }
 
         for (insc_id, holder) in self.nft_holders.iter() {

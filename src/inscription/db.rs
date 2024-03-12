@@ -1,4 +1,4 @@
-use super::types::{Inscription, InscriptionToken};
+use super::types::{Inscription, InscriptionToken, NFTTransfer};
 use crate::txn_db::TxnDB;
 use rocksdb::TransactionDB;
 
@@ -19,7 +19,9 @@ macro_rules! num_index_desc {
     };
 }
 
+pub const KEY_ROLLBACK_BLOCKNUMBER: &'static str = "rollback_blocknumber";
 pub const KEY_SYNC_BLOCKNUMBER: &'static str = "sync_blocknumber";
+pub const KEY_SYNC_BLOCK_HASH: &'static str = "sync_blockhash";
 
 // inscription top
 pub const KEY_INSC_SYNC_TOP: &'static str = "insc_sync_top";
@@ -43,6 +45,7 @@ pub const KEY_INSC_NFT_TRANS_INDEX_ID: &'static str = "insc_nft_trans_id";
 
 // inscription nft collection
 pub const KEY_INSC_NFT_COLL_INDEX_ID: &'static str = "insc_coll_id";
+pub const KEY_INSC_NFT_COLL_ITEM_INDEX_ID: &'static str = "insc_coll_item_id";
 
 // token
 pub const KEY_INSC_TOKEN_INDEX_ID: &'static str = "insc_token_id";
@@ -79,11 +82,15 @@ pub trait InscribeDB: TxnDB {
     fn get_top_inscription_id(&self) -> u64;
     fn get_top_inscription_sync_id(&self) -> u64;
     fn get_sync_blocknumber(&self) -> u64;
+    fn get_rollback_blocknumber(&self) -> u64;
+
+    fn get_block_hash(&self, blocknumber: u64) -> Option<String>;
 
     fn get_inscription_by_id(&self, id: u64) -> Option<Inscription>;
     fn get_inscriptions_by_id(&self, id_list: &Vec<u64>) -> Vec<Inscription>;
     fn get_inscription_id_by_tx(&self, tx: &str) -> u64;
     fn get_inscription_by_tx(&self, tx: &str) -> Option<Inscription>;
+    fn get_inscription_nft_collection_by_id(&self, id: u64) -> Option<String>;
     fn get_inscription_nft_holder_by_id(&self, id: u64) -> Option<String>;
     fn get_token(&self, tick: &str) -> Option<InscriptionToken>;
     fn get_tokens(&self) -> std::collections::HashMap<String, InscriptionToken>;
@@ -99,11 +106,15 @@ pub trait InscribeTxn<'a> {
     fn set_top_inscription_id(&self, id: u64);
     fn set_top_inscription_sync_id(&self, id: u64);
     fn set_sync_blocknumber(&self, blocknumber: u64);
+    fn set_rollback_blocknumber(&self, blocknumber: u64);
+    fn set_block_hash(&self, blocknumber: u64, block_hash: &str);
 
     fn inscription_insert(&self, insc: &Inscription);
     fn inscription_inscribe(&self, insc: &Inscription);
+    fn inscription_update(&self, insc: &Inscription);
     fn inscription_nft_holder_update(&self, db: &TransactionDB, id: u64, new_holder: &str);
-    fn inscription_nft_transfer_insert(&self, insc_id: u64, transfer_insc_id: u64, index: u64);
+    fn inscription_nft_transfer_insert(&self, trans: &NFTTransfer);
+    fn inscription_nft_set_collection(&self, id: u64, collection: &str);
     fn inscription_nft_collection_insert(&self, insc: &Inscription);
     fn inscription_token_insert(&self, token: &InscriptionToken);
     fn inscription_token_transfer_insert(&self, tick: &str, id: u64);

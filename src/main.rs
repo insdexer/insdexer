@@ -1,42 +1,17 @@
 use dotenv::dotenv;
-use insdexer::{api, config::OPEN_FILES_LIMIT, inscription};
+use insdexer::{adjust_open_files, api, config, inscription, log::init_log};
 use log::info;
 use tokio;
-
-fn adjust_open_files_limit() {
-    let limit = *OPEN_FILES_LIMIT;
-    if limit == 0 {
-        return;
-    }
-
-    let mut rlimit = libc::rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-    unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlimit) };
-    info!("current open files limit: {}", rlimit.rlim_cur);
-
-    let new_limit = libc::rlimit {
-        rlim_cur: limit,
-        rlim_max: limit,
-    };
-    unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &new_limit) };
-
-    unsafe {
-        libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlimit);
-    }
-    info!("new open files limit: {}", rlimit.rlim_cur);
-}
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
 
-    log4rs::init_file("./log4rs.yaml", Default::default()).unwrap();
+    init_log();
 
-    info!("{:?}", *insdexer::config::ARGS);
+    info!("{:?}", *config::ARGS);
 
-    adjust_open_files_limit();
+    adjust_open_files::adjust_open_files_limit();
 
     ctrlc::set_handler(|| {
         info!("Received Ctrl+C signal. Exiting...");
@@ -44,10 +19,10 @@ async fn main() {
     })
     .expect("Error setting Ctrl-C handler");
 
-    let mut indexer = inscription::types::Indexer::new();
-
-    api::server::run(indexer.db.clone()).await;
-
+    let indexer = inscription::types::Indexer::new();
     indexer.init();
+
+    api::server::run(*config::API_ONLY).await;
+
     indexer.run().await;
 }

@@ -82,7 +82,7 @@ impl ProcessBlockContextJsonToken for InscribeContext {
         }
 
         if self.db.read().unwrap().token_exists_i(tick) {
-            debug!("[indexer] inscribe token deploy: token existed: {} {}", insc.tx_hash, tick);
+            info!("[indexer] inscribe token deploy: token existed: {} {}", insc.tx_hash, tick);
             return false;
         }
 
@@ -115,6 +115,12 @@ impl ProcessBlockContextJsonToken for InscribeContext {
                 mint_finished: false,
                 updated: true,
                 deploy: true,
+
+                market_updated: false,
+                market_volume24h: 0,
+                market_txs24h: 0,
+                market_cap: 0,
+                market_floor_price: 0,
             },
         );
 
@@ -172,13 +178,13 @@ impl ProcessBlockContextJsonToken for InscribeContext {
         let transfer_amt = match insc.json["amt"].parse_u64() {
             Some(value) => value,
             None => {
-                debug!("[indexer] token transfer: invalid amount: {} {}", insc.tx_hash, tick);
+                info!("[indexer] token transfer: invalid amount: {} {}", insc.tx_hash, tick);
                 return false;
             }
         };
 
         if transfer_amt == 0 || transfer_amt > TOKEN_BALANCE_MAX {
-            debug!(
+            info!(
                 "[indexer] token transfer: invalid amount: {} {} {}",
                 insc.tx_hash, tick, transfer_amt
             );
@@ -188,13 +194,13 @@ impl ProcessBlockContextJsonToken for InscribeContext {
         let token = match self.token_cache.get(tick) {
             Some(value) => value,
             None => {
-                debug!("[indexer] token transfer: token not found: {} {}", insc.tx_hash, tick);
+                info!("[indexer] token transfer: token not found: {} {}", insc.tx_hash, tick);
                 return false;
             }
         };
 
         if !token.mint_finished {
-            debug!("[indexer] token transfer: mint not finished: {} {}", insc.tx_hash, tick);
+            info!("[indexer] token transfer: mint not finished: {} {}", insc.tx_hash, tick);
             return false;
         }
 
