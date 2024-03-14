@@ -332,6 +332,10 @@ impl MarketPlace for InscribeContext {
                 total_price += order.total_price;
             }
         }
+        
+        if total_amount == 0 {
+            return;
+        }
 
         let latest_unit_price = total_price / total_amount;
         token.market_volume24h = volume24;
