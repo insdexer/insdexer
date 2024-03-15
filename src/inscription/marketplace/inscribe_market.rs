@@ -37,7 +37,7 @@ impl MarketPlace for InscribeContext {
         }
     }
 
-    fn execute_market_buy(&mut self, insc: &Inscription, log: &web3::ethabi::Log) -> bool {
+    fn execute_market_buy(&mut self, insc: &mut Inscription, log: &web3::ethabi::Log) -> bool {
         let order_id = "0x".to_string() + &log.get_param("orderId").unwrap().to_string();
         let order = match self.db.read().unwrap().market_get_order_by_id(&order_id) {
             Some(order) => order,
@@ -46,6 +46,8 @@ impl MarketPlace for InscribeContext {
                 return false;
             }
         };
+
+        insc.market_order_id = Some(order_id.clone());
 
         match order.order_type {
             MarketOrderType::Token => self.execute_market_buy_token(insc, &order, log),
@@ -111,7 +113,7 @@ impl MarketPlace for InscribeContext {
         true
     }
 
-    fn execute_market_cancel(&mut self, insc: &Inscription, log: &web3::ethabi::Log) -> bool {
+    fn execute_market_cancel(&mut self, insc: &mut Inscription, log: &web3::ethabi::Log) -> bool {
         let order_id = "0x".to_string() + &log.get_param("orderId").unwrap().to_string();
         let order = match self.db.read().unwrap().market_get_order_by_id(&order_id) {
             Some(order) => order,
@@ -120,6 +122,8 @@ impl MarketPlace for InscribeContext {
                 return false;
             }
         };
+
+        insc.market_order_id = Some(order.order_id.clone());
 
         match order.order_type {
             MarketOrderType::Token => self.execute_market_cancel_token(insc, &order),
@@ -167,12 +171,14 @@ impl MarketPlace for InscribeContext {
         true
     }
 
-    fn execute_market_set_price(&mut self, insc: &Inscription, log: &web3::ethabi::Log) -> bool {
+    fn execute_market_set_price(&mut self, insc: &mut Inscription, log: &web3::ethabi::Log) -> bool {
         let order_id = "0x".to_string() + &log.get_param("orderId").unwrap().to_string();
         if self.db.read().unwrap().market_get_order_by_id(&order_id).is_none() {
             warn!("[indexer] market_set_price order not found: {} {}", insc.tx_hash, order_id);
             return false;
         }
+
+        insc.market_order_id = Some(order_id.clone());
 
         let total_price_u256 = log.get_param("price").unwrap().clone().into_uint().unwrap();
         let total_price: Result<u128, _> = total_price_u256.try_into();
@@ -296,9 +302,7 @@ impl MarketPlace for InscribeContext {
         log: &web3::ethabi::Log,
     ) {
         assert!(insc.event_logs.len() == 1);
-
         let order_id = "0x".to_string() + &log.get_param("orderId").unwrap().to_string();
-
         txn.market_order_close(db, &insc.tx_hash, &order_id, &insc.from);
     }
 
@@ -310,9 +314,7 @@ impl MarketPlace for InscribeContext {
         log: &web3::ethabi::Log,
     ) {
         assert!(insc.event_logs.len() == 1);
-
         let order_id = "0x".to_string() + &log.get_param("orderId").unwrap().to_string();
-
         txn.market_order_cancel(db, &insc.tx_hash, &order_id);
     }
 
@@ -332,7 +334,7 @@ impl MarketPlace for InscribeContext {
                 total_price += order.total_price;
             }
         }
-        
+
         if total_amount == 0 {
             return;
         }
