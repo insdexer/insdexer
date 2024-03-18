@@ -34,6 +34,24 @@ pub fn inscription_to_display(db: &rocksdb::DB, insc: &Inscription, include_imag
     if !include_imagedata && insc.mime_category == InscriptionMimeCategory::Image {
         insc_json["mime_data"] = serde_json::to_value("").unwrap();
     }
+
+    insc_json["mime_category"] = serde_json::to_value(match insc.mime_category {
+        InscriptionMimeCategory::Null => "null",
+        InscriptionMimeCategory::Text => "text",
+        InscriptionMimeCategory::Image => "image",
+        InscriptionMimeCategory::Transfer => "transfer",
+        InscriptionMimeCategory::Json => "json",
+        InscriptionMimeCategory::Invoke => "invoke",
+    })
+    .unwrap();
+
+    insc_json["verified"] = serde_json::to_value(match insc.verified {
+        InscriptionVerifiedStatus::Unresolved => "unknown",
+        InscriptionVerifiedStatus::Successful => "success",
+        InscriptionVerifiedStatus::Failed => "fail",
+    })
+    .unwrap();
+
     insc_json
 }
 
