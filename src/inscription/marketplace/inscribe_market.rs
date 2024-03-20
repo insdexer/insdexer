@@ -47,12 +47,16 @@ impl MarketPlace for InscribeContext {
             }
         };
 
-        insc.market_order_id = Some(order_id.clone());
-
-        match order.order_type {
+        let result = match order.order_type {
             MarketOrderType::Token => self.execute_market_buy_token(insc, &order, log),
             MarketOrderType::NFT => self.execute_market_buy_nft(insc, &order, log),
+        };
+
+        if result {
+            insc.market_order_id = Some(order_id.clone());
         }
+
+        result
     }
 
     fn execute_market_buy_token(&mut self, insc: &Inscription, order: &MarketOrder, log: &web3::ethabi::Log) -> bool {
@@ -123,12 +127,16 @@ impl MarketPlace for InscribeContext {
             }
         };
 
-        insc.market_order_id = Some(order.order_id.clone());
-
-        match order.order_type {
+        let result = match order.order_type {
             MarketOrderType::Token => self.execute_market_cancel_token(insc, &order),
             MarketOrderType::NFT => self.execute_market_cancel_nft(insc, &order),
+        };
+
+        if result {
+            insc.market_order_id = Some(order.order_id.clone());
         }
+
+        result
     }
 
     fn execute_market_cancel_token(&mut self, insc: &Inscription, order: &MarketOrder) -> bool {
@@ -178,12 +186,11 @@ impl MarketPlace for InscribeContext {
             return false;
         }
 
-        insc.market_order_id = Some(order_id.clone());
-
         let total_price_u256 = log.get_param("price").unwrap().clone().into_uint().unwrap();
         let total_price: Result<u128, _> = total_price_u256.try_into();
         match total_price {
             Ok(_) => {
+                insc.market_order_id = Some(order_id.clone());
                 info!("[indexer] market_set_price: {} {}", insc.tx_hash, order_id);
                 true
             }
