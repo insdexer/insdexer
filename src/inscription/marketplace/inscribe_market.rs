@@ -327,19 +327,15 @@ impl MarketPlace for InscribeContext {
 
     fn update_token_market_info(db: &TransactionDB, token: &mut InscriptionToken) {
         const MCAP_CALC_COUNT: u64 = 16;
-        let orders = db.market_get_closed_orders_24h(&token.tick);
+        let orders = db.market_get_latest_closed_orders(&token.tick, MCAP_CALC_COUNT);
         let mut volume24: u128 = 0;
         let mut total_amount: u128 = 0;
         let mut total_price: u128 = 0;
-        let mut calc_count = 0;
 
         for order in &orders {
             volume24 += order.amount as u128;
-            if calc_count < MCAP_CALC_COUNT && order.amount >= token.mint_limit {
-                calc_count += 1;
-                total_amount += order.amount as u128;
-                total_price += order.total_price;
-            }
+            total_amount += order.amount as u128;
+            total_price += order.total_price;
         }
 
         if total_amount == 0 {
