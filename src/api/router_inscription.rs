@@ -27,8 +27,9 @@ pub fn inscription_to_display(db: &rocksdb::DB, insc: &Inscription, include_imag
     }
 
     if let Some(market_order_id) = &insc.market_order_id {
-        let market_order = db.market_get_order_by_id(market_order_id).unwrap();
-        insc_json["market_order_info"] = market_order_to_display(&market_order);
+        if let Some(market_order) = db.market_get_order_by_id(market_order_id) {
+            insc_json["market_order_info"] = market_order_to_display(&market_order);
+        }
     }
 
     if !include_imagedata && insc.mime_category == InscriptionMimeCategory::Image {
